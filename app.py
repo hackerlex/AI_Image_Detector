@@ -1,38 +1,51 @@
+import os
 import streamlit as st
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import img_to_array
-import numpy as np
 from PIL import Image
+import tensorflow as tf
+from tensorflow import keras
 
-# Load your Keras model once
-model = load_model("model.h5")
+# --- Environment setup (silence GPU warnings if no GPU available) ---
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+# --- Model loader with caching ---
+@st.cache_resource(show_spinner=False)
+def load_model():
+    return keras.models.load_model("model.keras", compile=False)
+
+model = load_model()
+
+# --- Class labels (edit if your training used different labels) ---
+class_labels = ["Real", "AI-generated"]
+
+# --- Image preprocessing ---
 def preprocess_image(image: Image.Image, target_size=(224, 224)):
     image = image.resize(target_size)
-    image = img_to_array(image)
-    image = np.expand_dims(image, axis=0)
-    image = image / 255.0  # Normalize according to your model's training
-    return image
+    image = tf.cast(image, tf.float32) / 255.0  # normalize
+    return tf.expand_dims(image, axis=0)        # add batch dimension
 
-def main():
-    st.title("AI Image Detector with Custom Model")
+# --- Streamlit UI ---
+st.title("🖼️ AI Image Detector")
 
-    uploaded_file = st.file_uploader("Upload an image (PNG, JPG, JPEG)", type=["png", "jpg", "jpeg"])
+uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+if uploaded_file is not None:
+    image = Image.open(uploaded_file).convert("RGB")
+    st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_column_width=True)
-
-        processed_img = preprocess_image(image)
-
-        prediction = model.predict(processed_img)
-
-        # Example interpretation for binary classification with sigmoid activation
-        confidence = prediction[0][0]
-        if confidence > 0.5:
-            st.write(f"Likely AI-generated/manipulated with confidence {confidence:.2f}")
-        else:
-            st.write(f"Likely authentic with confidence {(1 - confidence):.2f}")
-
-if __name__ == "__main__":
-    main()
+    if st.button("Analyze"):
+        with st.spinner("Running model..."):
+            input_tensor = preprocess_image(image)
+            preds = model.predict(input_tensor)[0]  # first sample
+            
+            # Handle binary vs multi-class
+            if len(class_labels) == 2:  
+                score = float(preds[0])
+                label = class_labels[1] if score > 0.5 else class_labels[0]
+                confidence = score if label == class_labels[1] else 1 - score
+                st.markdown(f"### Prediction: **{label}** ({confidence:.2%} confidence)")
+            else:
+                # Multi-class softmax
+                idx = int(tf.argmax(preds))
+                label = class_labels[idx]
+                confidence = float(preds[idx])
+                st.markdown(f"### Prediction: **{label}** ({confidence:.2%} confidence)")
