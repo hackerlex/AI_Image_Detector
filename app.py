@@ -1,33 +1,38 @@
+import streamlit as st
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.image import img_to_array
 import numpy as np
 from PIL import Image
-import streamlit as st
 
-st.set_page_config(page_title="AI Image Detector", page_icon="🖼️")
-st.title("🖼️ AI Image Detector")
-st.write("Upload an image to check if it's AI-generated/manipulated or authentic.")
+# Load your Keras model once
+model = load_model("model.h5")
 
-uploaded = st.file_uploader("Upload an image", type=["jpg","jpeg","png","webp"])
+def preprocess_image(image: Image.Image, target_size=(224, 224)):
+    image = image.resize(target_size)
+    image = img_to_array(image)
+    image = np.expand_dims(image, axis=0)
+    image = image / 255.0  # Normalize according to your model's training
+    return image
 
-def heuristic_fallback(img: Image.Image):
-    """Simple texture-based heuristic for AI vs authentic detection"""
-    g = img.convert("L").resize((256,256))
-    g_arr = np.array(g, dtype=np.float32) / 255.0
-    dx = np.diff(g_arr, axis=1)
-    dy = np.diff(g_arr, axis=0)
-    texture_var = np.var(dx) + np.var(dy)
-    score = float(np.clip((texture_var * 100.0), 0.0, 1.0))
-    is_ai = score < 0.15
-    prob_ai = 1.0 - score if is_ai else 0.4
-    return is_ai, float(np.clip(prob_ai, 0.0, 1.0))
+def main():
+    st.title("AI Image Detector with Custom Model")
 
-if uploaded:
-    img = Image.open(uploaded)
-    st.image(img, caption="Uploaded image", use_container_width=True)
+    uploaded_file = st.file_uploader("Upload an image (PNG, JPG, JPEG)", type=["png", "jpg", "jpeg"])
 
-    # Always use heuristic (no ML model dependency)
-    is_ai, prob_ai = heuristic_fallback(img)
-    label = "AI-Generated / Manipulated" if is_ai else "Authentic"
+    if uploaded_file is not None:
+        image = Image.open(uploaded_file).convert("RGB")
+        st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    st.subheader(f"🔍 Result: **{label}**")
-    st.caption(f"Confidence: {prob_ai:.2%}")
-    st.info("Method: Heuristic fallback (no ML model)")
+        processed_img = preprocess_image(image)
+
+        prediction = model.predict(processed_img)
+
+        # Example interpretation for binary classification with sigmoid activation
+        confidence = prediction[0][0]
+        if confidence > 0.5:
+            st.write(f"Likely AI-generated/manipulated with confidence {confidence:.2f}")
+        else:
+            st.write(f"Likely authentic with confidence {(1 - confidence):.2f}")
+
+if __name__ == "__main__":
+    main()
