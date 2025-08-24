@@ -4,7 +4,7 @@ from PIL import Image
 import tensorflow as tf
 from tensorflow import keras
 
-# Silence Streamlit watchdog errors & TensorFlow warnings
+# Silence verbose warnings
 os.environ["STREAMLIT_WATCHDOG_TYPE"] = "polling"
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -23,20 +23,22 @@ model = load_model()
 class_labels = ["Real", "AI-generated"]
 
 def preprocess_image(image: Image.Image, target_size=(224, 224)):
-    # Resize and normalize the image for MobileNetV2
+    # Resize and apply MobileNetV2 preprocessing
     image = image.resize(target_size)
     image_array = tf.keras.preprocessing.image.img_to_array(image)
-    image_array = tf.expand_dims(image_array, 0)  # Add batch dimension
+    image_array = tf.expand_dims(image_array, 0)  # Add batch dim
     image_array = tf.keras.applications.mobilenet_v2.preprocess_input(image_array)
     return image_array
 
 st.title("🖼️ AI Image Detector")
 
-# Add slider UI to adjust classification threshold interactively
+# Threshold slider to fine-tune classification cutoff
 threshold = st.slider("Set classification threshold", 0.0, 1.0, 0.5, 0.01)
 
 uploaded_files = st.file_uploader(
-    "Upload one or more images", type=["jpg", "jpeg", "png"], accept_multiple_files=True
+    "Upload one or more images",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True,
 )
 
 if uploaded_files:
@@ -47,13 +49,13 @@ if uploaded_files:
 
         with st.spinner("Analyzing..."):
             input_tensor = preprocess_image(image)
-            preds = model.predict(input_tensor, verbose=0)[0][0]
-
-            label = class_labels[1] if preds > threshold else class_labels[0]
-            confidence = preds if label == class_labels[1] else 1 - preds
-
-            st.markdown(
-                f"**Prediction for {uploaded_file.name}: {label} ({confidence:.2%} confidence)**"
-            )
+            preds = model.predict(input_tensor, verbose=0)
+            
+            score = float(preds[0][0])  # Sigmoid output
+            
+            label = class_labels[1] if score > threshold else class_labels[0]
+            confidence = score if label == class_labels[1] else 1 - score
+            
+            st.markdown(f"**Prediction for {uploaded_file.name}: {label} ({confidence:.2%} confidence)**")
 
         progress.progress(idx / len(uploaded_files))
