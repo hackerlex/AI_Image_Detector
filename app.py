@@ -3,6 +3,7 @@ import streamlit as st
 from PIL import Image
 import tensorflow as tf
 from tensorflow import keras
+import numpy as np
 
 # Silence verbose warnings
 os.environ["STREAMLIT_WATCHDOG_TYPE"] = "polling"
@@ -23,11 +24,11 @@ model = load_model()
 class_labels = ["Real", "AI-generated"]
 
 def preprocess_image(image: Image.Image, target_size=(224, 224)):
-    # Resize and apply MobileNetV2 preprocessing
+    """Resize and normalize image to match training pipeline (rescale=1./255)."""
     image = image.resize(target_size)
-    image_array = tf.keras.preprocessing.image.img_to_array(image)
-    image_array = tf.expand_dims(image_array, 0)  # Add batch dim
-    image_array = tf.keras.applications.mobilenet_v2.preprocess_input(image_array)
+    image_array = keras.preprocessing.image.img_to_array(image)
+    image_array = image_array / 255.0  # ✅ same as training
+    image_array = np.expand_dims(image_array, axis=0)  # Add batch dimension
     return image_array
 
 st.title("🖼️ AI Image Detector")
@@ -56,6 +57,9 @@ if uploaded_files:
             label = class_labels[1] if score > threshold else class_labels[0]
             confidence = score if label == class_labels[1] else 1 - score
             
-            st.markdown(f"**Prediction for {uploaded_file.name}: {label} ({confidence:.2%} confidence)**")
+            st.markdown(
+                f"**Prediction for `{uploaded_file.name}` → {label} "
+                f"({confidence:.2%} confidence)**"
+            )
 
         progress.progress(idx / len(uploaded_files))
