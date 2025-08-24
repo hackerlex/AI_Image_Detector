@@ -4,22 +4,21 @@ from PIL import Image
 import tensorflow as tf
 from tensorflow import keras
 
-# --- Environment setup (silence GPU warnings on Streamlit Cloud) ---
+# --- Silence GPU/TF warnings ---
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
-# --- Model loader with caching ---
+# --- Cache model so it only loads once ---
 @st.cache_resource(show_spinner=False)
 def load_model():
-    # Load the Keras v3 model saved as .keras
     return keras.models.load_model("model.keras", compile=False)
 
 model = load_model()
 
-# --- Class labels ---
+# --- Class labels (edit if training had different order) ---
 class_labels = ["Real", "AI-generated"]
 
-# --- Preprocessing ---
+# --- Image preprocessing ---
 def preprocess_image(image: Image.Image, target_size=(224, 224)):
     image = image.resize(target_size)
     image = tf.cast(image, tf.float32) / 255.0  # normalize
@@ -28,19 +27,25 @@ def preprocess_image(image: Image.Image, target_size=(224, 224)):
 # --- Streamlit UI ---
 st.title("🖼️ AI Image Detector")
 
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
-if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Uploaded Image", use_column_width=True)
+uploaded_files = st.file_uploader(
+    "Upload one or more images",
+    type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True
+)
 
-    if st.button("Analyze"):
-        with st.spinner("Running model..."):
+if uploaded_files:
+    for uploaded_file in uploaded_files:
+        image = Image.open(uploaded_file).convert("RGB")
+        st.image(image, caption=f"Uploaded: {uploaded_file.name}", use_column_width=True)
+
+        with st.spinner("Analyzing..."):
             input_tensor = preprocess_image(image)
-            preds = model.predict(input_tensor)[0]
+            preds = model.predict(input_tensor, verbose=0)[0]
 
-            # Binary classification
             score = float(preds[0])
             label = class_labels[1] if score > 0.5 else class_labels[0]
             confidence = score if label == class_labels[1] else 1 - score
 
-            st.markdown(f"### Prediction: **{label}** ({confidence:.2%} confidence)")
+            st.markdown(
+                f"**Prediction for {uploaded_file.name}: {label} ({confidence:.2%} confidence)**"
+            )
