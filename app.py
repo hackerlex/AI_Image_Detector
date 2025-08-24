@@ -4,21 +4,22 @@ from PIL import Image
 import tensorflow as tf
 from tensorflow import keras
 
-# --- Environment setup (silence GPU warnings if no GPU available) ---
+# --- Environment setup (silence GPU warnings on Streamlit Cloud) ---
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 # --- Model loader with caching ---
 @st.cache_resource(show_spinner=False)
 def load_model():
+    # Load the Keras v3 model saved as .keras
     return keras.models.load_model("model.keras", compile=False)
 
 model = load_model()
 
-# --- Class labels (edit if your training used different labels) ---
+# --- Class labels ---
 class_labels = ["Real", "AI-generated"]
 
-# --- Image preprocessing ---
+# --- Preprocessing ---
 def preprocess_image(image: Image.Image, target_size=(224, 224)):
     image = image.resize(target_size)
     image = tf.cast(image, tf.float32) / 255.0  # normalize
@@ -35,17 +36,11 @@ if uploaded_file is not None:
     if st.button("Analyze"):
         with st.spinner("Running model..."):
             input_tensor = preprocess_image(image)
-            preds = model.predict(input_tensor)[0]  # first sample
-            
-            # Handle binary vs multi-class
-            if len(class_labels) == 2:  
-                score = float(preds[0])
-                label = class_labels[1] if score > 0.5 else class_labels[0]
-                confidence = score if label == class_labels[1] else 1 - score
-                st.markdown(f"### Prediction: **{label}** ({confidence:.2%} confidence)")
-            else:
-                # Multi-class softmax
-                idx = int(tf.argmax(preds))
-                label = class_labels[idx]
-                confidence = float(preds[idx])
-                st.markdown(f"### Prediction: **{label}** ({confidence:.2%} confidence)")
+            preds = model.predict(input_tensor)[0]
+
+            # Binary classification
+            score = float(preds[0])
+            label = class_labels[1] if score > 0.5 else class_labels[0]
+            confidence = score if label == class_labels[1] else 1 - score
+
+            st.markdown(f"### Prediction: **{label}** ({confidence:.2%} confidence)")
